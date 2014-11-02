@@ -202,13 +202,11 @@ if parse:
 
 
 if index:
+    print("Creating indexes...")
     index_start = time.time()
-
-    print("Creating accept_time index...")
-    r.table("haproxy").index_create("accept_time").run(conn)
-    print("Created; waiting for complete population...")
-    r.table("haproxy").index_wait("accept_time").run(conn)
-
+    r.table("haproxy").index_create("http_verb").run(conn)
+    r.table("haproxy").index_create("status_code").run(conn)
+    r.table("haproxy").index_wait("http_verb").run(conn)
+    r.table("haproxy").index_wait("status_code").run(conn)
     index_end = time.time()
-
     print("Index creation completed in {0:.2f} seconds".format(index_end - index_start))
