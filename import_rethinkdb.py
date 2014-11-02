@@ -4,6 +4,7 @@ import time
 
 reimport = True
 parse = True
+index = True
 
 conn = r.connect('localhost', 28015)
 conn.use("logs")
@@ -66,14 +67,14 @@ regex = r"""
 (?P<actconn>[^/]+)/(?P<feconn>[^/]+)/(?P<beconn>[^/]+)/(?P<srv_conn>[^/]+)/(?P<retries>[^ ]+)
  
 (?P<srv_queue>[^/]+)/(?P<backend_queue>[^ ]+)
+ 
+.*
+\"((?P<http_verb>[^ ]+) (?P<request_uri>[^ ]+) ?(?P<http_version>HTTP/[0-9]\.[0-9])?|<BADREQ>)\"?
 """
-# 
-#"(?P<http_verb>[^ ]+) (?P<request_uri>[^ ]+) (?P<http_version>HTTP/[0-9]\.[0-9])"
-#"""
 
 if parse:
     regex = regex.replace("\n", "")
-    #print(repr(regex))
+    print(repr(regex))
 
     parse_start = time.time()
 
@@ -109,6 +110,7 @@ if parse:
                 match["groups"][2]["str"].coerce_to("number"),
                 match["groups"][3]["str"].coerce_to("number"),
                 match["groups"][4]["str"].coerce_to("number"),
+                "-06:00"
             ),
             "log_ip": match["groups"][5]["str"],
             "process_name": match["groups"][6]["str"],
@@ -128,6 +130,7 @@ if parse:
                 match["groups"][13]["str"].coerce_to("number"),
                 match["groups"][14]["str"].coerce_to("number"),
                 match["groups"][15]["str"].coerce_to("number"),
+                "-06:00"
             ),
             "frontend_name": match["groups"][16]["str"],
             "backend_name": match["groups"][17]["str"],
@@ -149,20 +152,42 @@ if parse:
             "retries": match["groups"][33]["str"].coerce_to("number"),
             "srv_queue": match["groups"][34]["str"].coerce_to("number"),
             "backend_queue": match["groups"][35]["str"].coerce_to("number"),
+            # 36 - full
+            # 37 - null or http verb
+            # 38 - null or request uri
+            # 39 - null or http version
+            "http_verb": r.branch(match["groups"][37] == None, match["groups"][36]["str"], match["groups"][37]["str"]),
+            "request_uri": r.branch(match["groups"][38] == None, None, match["groups"][38]["str"]),
+            "http_version": r.branch(match["groups"][39] == None, None, match["groups"][39]["str"]),
         }
 
     print("Beginning parse pass")
-    r.table("haproxy").update(regex_parse, durability="soft").run(conn)
+    retval = r.table("haproxy").update(regex_parse, durability="soft").run(conn)
+    if retval["errors"] != 0:
+        print("Errors during update")
+        print(repr(retval))
+        import sys; sys.exit(1)
     print("Parse pass complete")
+    print("SYNC")
+    r.table("haproxy").sync().run(conn)
 
     print("Beginning extract pass")
-    r.table("haproxy").update(extract, durability="soft").run(conn)
+    retval = r.table("haproxy").update(extract, durability="soft").run(conn)
+    if retval["errors"] != 0:
+        print("Errors during update")
+        print(repr(retval))
+        import sys; sys.exit(1)
     print("Extract pass complete")
+    print("SYNC")
+    r.table("haproxy").sync().run(conn)
 
     print("Beginning delete pass")
-    r.table('haproxy').replace(r.row.without('_match'), durability="soft").run(conn)
+    retval = r.table('haproxy').replace(r.row.without('_match'), durability="soft").run(conn)
+    if retval["errors"] != 0:
+        print("Errors during replace")
+        print(repr(retval))
+        import sys; sys.exit(1)
     print("Delete pass complete")
-
     print("SYNC")
     r.table("haproxy").sync().run(conn)
 
@@ -174,3 +199,16 @@ if parse:
     #for row in r.table("haproxy").filter(lambda rec: rec["_raw"].match(regex) == None).limit(1).run(conn):
     #    print(repr(row))
     #print("end")
+
+
+if index:
+    index_start = time.time()
+
+    print("Creating accept_time index...")
+    r.table("haproxy").index_create("accept_time").run(conn)
+    print("Created; waiting for complete population...")
+    r.table("haproxy").index_wait("accept_time").run(conn)
+
+    index_end = time.time()
+
+    print("Index creation completed in {0:.2f} seconds".format(index_end - index_start))
