@@ -1,0 +1,4 @@
+venv
+rethinkdb_data
+__pycache__
+config.py
