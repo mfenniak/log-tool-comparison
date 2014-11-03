@@ -18,7 +18,7 @@ def reimport():
     import_start = time.time()
 
     total_count = 0
-    for lines_buffer in common.chunk_lines(10000):
+    for lines_buffer in common.chunk_lines(500000):
         total_count += len(lines_buffer)
         print("Inserting {0} more records, {1:,} total inserted".format(len(lines_buffer), total_count))
         f = io.StringIO("\n".join(lines_buffer))
