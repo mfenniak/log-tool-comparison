@@ -5,6 +5,7 @@ import gzip
 def chunk_lines(lines_buffer_size):
     lines_buffer = []
     for url in config.LOG_FILES:
+        print("URL:", url)
         req = requests.get(url, stream=True)
         stream = gzip.GzipFile(fileobj=req.raw, mode="r")
         while True:
