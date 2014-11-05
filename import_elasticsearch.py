@@ -48,7 +48,7 @@ def stream(queue):
             if lines_buffer == None:
                 break
             for line in lines_buffer:
-                source = {"_raw": line}
+                source = { "_raw": line}
                 m = preped_regex.match(line)
                 if m != None:
                     source.update(m.groupdict())
@@ -71,7 +71,17 @@ def reimport():
         es.indices.delete(index="logs")
     print("Creating index")
     es.indices.create(index="logs", body={
-        "settings": { "index": { "number_of_shards": 6 } }
+        "settings": {
+            "index": { "number_of_shards": 6 },
+            "analysis": {
+                "analyzer": {
+                    "uripath": {
+                        "type": "pattern",
+                        "pattern": "[/?&=\\.]+"
+                    }
+                }
+            }
+        }
     })
 
     es.cluster.health(wait_for_status='yellow')
@@ -79,43 +89,49 @@ def reimport():
     es.indices.put_mapping(index="logs", doc_type="haproxy", body={
         "dynamic": "strict",
         "properties": {
-            "Tc":{"type":"integer"},
-            "Tq":{"type":"integer"},
-            "Tr":{"type":"integer"},
-            "Tt":{"type":"integer"},
-            "Tw":{"type":"integer"},
-            "_raw":{"type":"string"},
+            "Tc": { "type": "integer" },
+            "Tq": { "type": "integer" },
+            "Tr": { "type": "integer" },
+            "Tt": { "type": "integer" },
+            "Tw": { "type": "integer" },
+            "_raw": { "type": "string" },
             "accept_datetime": {
                 "type": "date",
                 "format": "dd/MMM/yyyy:HH:mm:ss.SSS",
             },
-            "actconn":{"type":"integer"},
-            "backend_name":{"type":"string"},
-            "backend_queue":{"type":"integer"},
-            "beconn":{"type":"integer"},
-            "bytes_read":{"type":"integer"},
-            "captured_request_cookie":{"type":"string"},
-            "captured_response_cookie":{"type":"string"},
-            "client_ip":{"type":"ip"},
-            "client_port":{"type":"integer"},
-            "feconn":{"type":"integer"},
-            "frontend_name":{"type":"string"},
-            "http_verb":{"type":"string"},
-            "http_version":{"type":"string"},
+            "actconn": { "type": "integer" },
+            "backend_name": { "type": "string", "index": "not_analyzed" },
+            "backend_queue": { "type": "integer" },
+            "beconn": { "type": "integer" },
+            "bytes_read": { "type": "integer" },
+            "captured_request_cookie": { "type": "string", "index": "not_analyzed" },
+            "captured_response_cookie": { "type": "string", "index": "not_analyzed" },
+            "client_ip": { "type": "ip" },
+            "client_port": { "type": "integer" },
+            "feconn": { "type": "integer" },
+            "frontend_name": { "type": "string", "index": "not_analyzed" },
+            "http_verb": { "type": "string", "index": "not_analyzed" },
+            "http_version": { "type": "string", "index": "not_analyzed" },
             "log_datetime": {
                 "type": "date",
                 "format": "MMM dd HH:mm:ss",
             },
-            "log_ip":{"type":"ip"},
-            "pid":{"type":"integer"},
-            "process_name":{"type":"string"},
-            "request_uri":{"type":"string"},
-            "retries":{"type":"integer"},
-            "server_name":{"type":"string"},
-            "srv_conn":{"type":"integer"},
-            "srv_queue":{"type":"integer"},
-            "status_code":{"type":"integer"},
-            "termination_state":{"type":"string"}
+            "log_ip": { "type": "ip" },
+            "pid": { "type": "integer" },
+            "process_name": { "type": "string" },
+            "request_uri": {
+                "type": "multi_field",
+                "fields": {
+                    "request_uri": { "type": "string", "index": "not_analyzed" },
+                    "request_uri_parts": { "type": "string", "index": "analyzed", "analyzer": "uripath" }
+                }
+            },
+            "retries": { "type": "integer" },
+            "server_name": { "type": "string", "index": "not_analyzed" },
+            "srv_conn": { "type": "integer" },
+            "srv_queue": { "type": "integer" },
+            "status_code": { "type": "integer" },
+            "termination_state": { "type": "string", "index": "not_analyzed" }
         }
     })
 
