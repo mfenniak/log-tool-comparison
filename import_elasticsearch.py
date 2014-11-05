@@ -44,16 +44,17 @@ def stream(queue):
     preped_regex = re.compile(regex.replace("\n", ""))
     while True:
         lines_buffer = queue.get()
-        if lines_buffer == None:
+        try:
+            if lines_buffer == None:
+                break
+            for line in lines_buffer:
+                source = {"_raw": line}
+                m = preped_regex.match(line)
+                if m != None:
+                    source.update(m.groupdict())
+                yield { "_index": "logs", "_type": "haproxy", "_source": source }
+        finally:
             queue.task_done()
-            break
-        for line in lines_buffer:
-            source = {"_raw": line}
-            m = preped_regex.match(line)
-            if m != None:
-                source.update(m.groupdict())
-            yield { "_index": "logs", "_type": "haproxy", "_source": source }
-        queue.task_done()
 
 def internal_reimport(queue):
     es = Elasticsearch()
@@ -69,7 +70,11 @@ def reimport():
         print("Deleting existing index")
         es.indices.delete(index="logs")
     print("Creating index")
-    es.indices.create(index="logs")
+    es.indices.create(index="logs", body={
+        "settings": { "index": { "number_of_shards": 6 } }
+    })
+
+    es.cluster.health(wait_for_status='yellow')
 
     es.indices.put_mapping(index="logs", doc_type="haproxy", body={
         "dynamic": "strict",
@@ -101,6 +106,7 @@ def reimport():
                 "type": "date",
                 "format": "MMM dd HH:mm:ss",
             },
+            "log_ip":{"type":"ip"},
             "pid":{"type":"integer"},
             "process_name":{"type":"string"},
             "request_uri":{"type":"string"},
