@@ -6,7 +6,7 @@ from elasticsearch.helpers import streaming_bulk
 from multiprocessing import Process, JoinableQueue
 
 regex = r"""
-^(?P<log_month>[A-Za-z]{3}) (?P<log_day>[0-9]{2}) (?P<log_hour>[0-9]{2}):(?P<log_minute>[0-9]{2}):(?P<log_second>[0-9]{2})
+^(?P<log_datetime>[A-Za-z]{3} [0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})
  
 (?P<log_ip>[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3})
  
@@ -14,7 +14,7 @@ regex = r"""
  
 (?P<client_ip>[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+):(?P<client_port>[0-9]+)
  
-\[(?P<accept_day>[0-9]{2})/(?P<accept_month>[A-Za-z]{3})/(?P<accept_year>[0-9]{4}):(?P<accept_hour>[0-9]{2}):(?P<accept_minute>[0-9]{2}):(?P<accept_second>[0-9]{2}\.[0-9]{3})\]
+\[(?P<accept_datetime>[0-9]{2}/[A-Za-z]{3}/[0-9]{4}:[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3})\]
  
 (?P<frontend_name>[^ ]+)
  
@@ -52,7 +52,7 @@ def stream(queue):
             m = preped_regex.match(line)
             if m != None:
                 source.update(m.groupdict())
-            yield { "_index": "logs", "_type": "document", "_source": source }
+            yield { "_index": "logs", "_type": "haproxy", "_source": source }
         queue.task_done()
 
 def internal_reimport(queue):
@@ -70,6 +70,48 @@ def reimport():
         es.indices.delete(index="logs")
     print("Creating index")
     es.indices.create(index="logs")
+
+    es.indices.put_mapping(index="logs", doc_type="haproxy", body={
+        "dynamic": "strict",
+        "properties": {
+            "Tc":{"type":"integer"},
+            "Tq":{"type":"integer"},
+            "Tr":{"type":"integer"},
+            "Tt":{"type":"integer"},
+            "Tw":{"type":"integer"},
+            "_raw":{"type":"string"},
+            "accept_datetime": {
+                "type": "date",
+                "format": "dd/MMM/yyyy:HH:mm:ss.SSS",
+            },
+            "actconn":{"type":"integer"},
+            "backend_name":{"type":"string"},
+            "backend_queue":{"type":"integer"},
+            "beconn":{"type":"integer"},
+            "bytes_read":{"type":"integer"},
+            "captured_request_cookie":{"type":"string"},
+            "captured_response_cookie":{"type":"string"},
+            "client_ip":{"type":"ip"},
+            "client_port":{"type":"integer"},
+            "feconn":{"type":"integer"},
+            "frontend_name":{"type":"string"},
+            "http_verb":{"type":"string"},
+            "http_version":{"type":"string"},
+            "log_datetime": {
+                "type": "date",
+                "format": "MMM dd HH:mm:ss",
+            },
+            "pid":{"type":"integer"},
+            "process_name":{"type":"string"},
+            "request_uri":{"type":"string"},
+            "retries":{"type":"integer"},
+            "server_name":{"type":"string"},
+            "srv_conn":{"type":"integer"},
+            "srv_queue":{"type":"integer"},
+            "status_code":{"type":"integer"},
+            "termination_state":{"type":"string"}
+        }
+    })
 
     import_start = time.time()
 
@@ -96,6 +138,7 @@ def reimport():
     print(
         "Imported & parsed {0:,} records in {1:.2f} seconds, {2:.2f} records / second".format(
             total_count, import_end - import_start, total_count / (import_end - import_start)))
+
 
 if __name__ == "__main__":
     reimport()
