@@ -72,7 +72,7 @@ def reimport():
     print("Creating index")
     es.indices.create(index="logs", body={
         "settings": {
-            "index": { "number_of_shards": 6 },
+            "index": { "number_of_shards": 16 },
             "analysis": {
                 "analyzer": {
                     "uripath": {
